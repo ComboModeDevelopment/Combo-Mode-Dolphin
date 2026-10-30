@@ -177,6 +177,7 @@ private:
   #ifdef SHOW_UPDATER
   void ShowUpdateDialog();
   void CheckForUpdatesAuto();
+  void CheckForModUpdate();
 #endif  // SHOW_UPDATER
   void ShowHotkeyDialog();
   void ShowNetPlaySetupDialog();

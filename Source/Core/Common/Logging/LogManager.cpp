@@ -32,6 +32,13 @@ const Config::Info<bool> LOGGER_WRITE_TO_WINDOW{
 const Config::Info<LogLevel> LOGGER_VERBOSITY{{Config::System::Logger, "Options", "Verbosity"},
                                               LogLevel::LNOTICE};
 
+// Combo Mode change: OSReport output is on by default.
+static Config::Info<bool> GetLogEnableInfo(const std::string& short_name)
+{
+  const bool default_enabled = short_name == "OSREPORT" || short_name == "OSREPORT_HLE";
+  return Config::Info<bool>{{Config::System::Logger, "Logs", short_name}, default_enabled};
+}
+
 class FileLogListener : public LogListener
 {
 public:
@@ -166,8 +173,7 @@ LogManager::LogManager()
 
   for (auto& container : m_log)
   {
-    container.m_enable = Config::Get(
-        Config::Info<bool>{{Config::System::Logger, "Logs", container.m_short_name}, false});
+    container.m_enable = Config::Get(GetLogEnableInfo(container.m_short_name));
   }
 
   m_path_cutoff_point = DeterminePathCutOffPoint();
@@ -193,8 +199,7 @@ void LogManager::SaveSettings()
 
   for (const auto& container : m_log)
   {
-    const Config::Info<bool> info{{Config::System::Logger, "Logs", container.m_short_name}, false};
-    Config::SetBaseOrCurrent(info, container.m_enable);
+    Config::SetBaseOrCurrent(GetLogEnableInfo(container.m_short_name), container.m_enable);
   }
 
   Config::Save();

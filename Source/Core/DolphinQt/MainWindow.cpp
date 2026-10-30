@@ -10,9 +10,11 @@
 #include <QDir>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QFile>
 #include <QFileInfo>
 #include <QIcon>
 #include <QMimeData>
+#include <QPushButton>
 #include <QStackedWidget>
 #include <QStyleHints>
 #include <QVBoxLayout>
@@ -20,6 +22,8 @@
 #include <QMessageBox>
 #include <QByteArray>
 #include <QJsonDocument>
+#include <QRegularExpression>
+#include <QVersionNumber>
 
 #include <fmt/format.h>
 
@@ -273,6 +277,7 @@ MainWindow::MainWindow(Core::System& system, std::unique_ptr<BootParameters> boo
 
 #ifdef SHOW_UPDATER
   CheckForUpdatesAuto();
+  CheckForModUpdate();
 #endif  // SHOW_UPDATER
 
 #ifdef USE_RETRO_ACHIEVEMENTS
@@ -1440,7 +1445,7 @@ void MainWindow::ShowUpdateDialog()
     Common::HttpRequest httpRequest;
 
     // Make the GET request
-    auto response = httpRequest.Get("https://api.github.com/repos/Project-Plus-Development-Team/Project-Plus-Dolphin/releases/latest");
+    auto response = httpRequest.Get("https://api.github.com/repos/ComboModeDevelopment/Combo-Mode-Dolphin/releases/latest");
 
     if (response)
     {
@@ -1476,7 +1481,7 @@ void MainWindow::CheckForUpdatesAuto()
     Common::HttpRequest httpRequest;
 
     // Make the GET request
-    auto response = httpRequest.Get("https://api.github.com/repos/Project-Plus-Development-Team/Project-Plus-Dolphin/releases/latest");
+    auto response = httpRequest.Get("https://api.github.com/repos/ComboModeDevelopment/Combo-Mode-Dolphin/releases/latest");
 
     if (response)
     {
@@ -1503,6 +1508,47 @@ void MainWindow::CheckForUpdatesAuto()
         // Handle error
         QMessageBox::critical(this, tr("Error"), tr("Failed to fetch update information."));
     }
+}
+
+// Combo Mode change: The Dolphin updater never touches the mod, so this only tells the user when
+// Combo-Mode-Releases has a newer version than the installed launcher.
+void MainWindow::CheckForModUpdate()
+{
+  const QString launcher_dir = QString::fromStdString(File::GetUserPath(D_LAUNCHERS_IDX));
+  QFile launcher_xml(QDir(launcher_dir).filePath(QStringLiteral("Combo Mode Netplay Launcher.xml")));
+  if (!launcher_xml.open(QIODevice::ReadOnly | QIODevice::Text))
+    return;
+
+  static const QRegularExpression version_regex(QStringLiteral("<version>\\s*v?([^<\\s]+)\\s*</version>"));
+  const auto match = version_regex.match(QString::fromUtf8(launcher_xml.readAll()));
+  const QVersionNumber installed = QVersionNumber::fromString(match.captured(1));
+
+  Common::HttpRequest httpRequest;
+  auto response = httpRequest.Get("https://api.github.com/repos/ComboModeDevelopment/Combo-Mode-Releases/releases/latest");
+  if (!response)
+    return;
+
+  const QByteArray responseData(reinterpret_cast<const char*>(response->data()), response->size());
+  QString latest_tag = QJsonDocument::fromJson(responseData).object().value(QStringLiteral("tag_name")).toString();
+  const QVersionNumber latest = QVersionNumber::fromString(latest_tag.remove(QRegularExpression(QStringLiteral("^v"))));
+
+  if (installed.isNull() || latest.isNull() || latest <= installed)
+    return;
+
+  QMessageBox message(this);
+  message.setIcon(QMessageBox::Warning);
+  message.setWindowTitle(tr("Combo Mode Update Available"));
+  message.setText(tr("Combo Mode v%1 is available, but you have v%2 installed.\n\n"
+                     "Download the new version from the Combo-Mode-Releases page.")
+                      .arg(latest.toString(), installed.toString()));
+  QPushButton* open_button = message.addButton(tr("Open Releases Page"), QMessageBox::AcceptRole);
+  message.addButton(tr("Later"), QMessageBox::RejectRole);
+  message.exec();
+
+  if (message.clickedButton() == open_button)
+  {
+    QDesktopServices::openUrl(QUrl(QStringLiteral("https://github.com/ComboModeDevelopment/Combo-Mode-Releases/releases/latest")));
+  }
 }
 #endif  // SHOW_UPDATER
 
