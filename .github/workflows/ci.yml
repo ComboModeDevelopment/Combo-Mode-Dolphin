@@ -2,17 +2,11 @@ name: Combo Mode Dolphin Builder
 
 on:
   push:
-    branches:
-      - "**"
     tags:
       - 'v*'
-    paths-ignore:
-      - "**.md"
-  pull_request:
-    branches:
-      - master
+  workflow_dispatch:
 
-jobs: 
+jobs:
   build_windows_x86_64:
     name: Windows Build
     runs-on: windows-latest

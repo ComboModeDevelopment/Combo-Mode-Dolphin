@@ -1,6 +1,7 @@
 <?xml version="1.1.0" encoding="UTF-8" standalone="yes"?>
 <app version="1">
-  <name>Combo Mode</name>
+  <name>Combo Mode (Netplay)</name>
+  <coder>ComboMode Dev Team</coder>
   <version>1.2.1</version>
   <release_date>20080523000000</release_date>
   <short_description>Brawl with more combos</short_description>
