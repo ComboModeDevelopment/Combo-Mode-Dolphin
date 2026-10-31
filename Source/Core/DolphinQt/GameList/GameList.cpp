@@ -35,6 +35,9 @@
 #include <QListView>
 #include <QMap>
 #include <QMenu>
+#include <QPainter>
+#include <QPixmap>
+#include <QScrollBar>
 #include <QShortcut>
 #include <QSortFilterProxyModel>
 #include <QTableView>
@@ -74,12 +77,68 @@
 
 namespace
 {
+constexpr qreal GAME_LIST_BACKGROUND_OPACITY = 0.2;
+
+QString GetGameListBackgroundPath()
+{
+  return QString::fromStdString(File::GetSysDirectory() + "Resources/game_list_background.png");
+}
+
+// Combo Mode change: Draws an optional image behind the games, cropped to fill the view.
+class GameListBackground
+{
+public:
+  explicit GameListBackground(QAbstractScrollArea* view) : m_image(GetGameListBackgroundPath())
+  {
+    if (m_image.isNull())
+      return;
+
+    // Qt moves the existing pixels when scrolling, which would smear a fixed background.
+    const auto repaint = [view] { view->viewport()->update(); };
+    QObject::connect(view->verticalScrollBar(), &QScrollBar::valueChanged, view, repaint);
+    QObject::connect(view->horizontalScrollBar(), &QScrollBar::valueChanged, view, repaint);
+  }
+
+  void Paint(QWidget* viewport)
+  {
+    if (m_image.isNull())
+      return;
+
+    const qreal ratio = viewport->devicePixelRatioF();
+    const QSize size = viewport->size() * ratio;
+    if (size != m_scaled_for)
+    {
+      m_scaled = m_image.scaled(size, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
+      m_scaled.setDevicePixelRatio(ratio);
+      m_scaled_for = size;
+    }
+
+    const QSizeF scaled_size = m_scaled.deviceIndependentSize();
+    QPainter painter(viewport);
+    painter.setOpacity(GAME_LIST_BACKGROUND_OPACITY);
+    painter.drawPixmap(QPointF((viewport->width() - scaled_size.width()) / 2,
+                               (viewport->height() - scaled_size.height()) / 2),
+                       m_scaled);
+  }
+
+private:
+  QPixmap m_image;
+  QPixmap m_scaled;
+  QSize m_scaled_for;
+};
+
 class GameListTableView : public QTableView
 {
 public:
-  explicit GameListTableView(QWidget* parent = nullptr) : QTableView(parent) {}
+  explicit GameListTableView(QWidget* parent = nullptr) : QTableView(parent), m_background(this) {}
 
 protected:
+  void paintEvent(QPaintEvent* event) override
+  {
+    m_background.Paint(viewport());
+    QTableView::paintEvent(event);
+  }
+
   QModelIndex moveCursor(CursorAction cursorAction, Qt::KeyboardModifiers modifiers) override
   {
     // QTableView::moveCursor handles home by moving to the first column and end by moving to the
@@ -97,19 +156,31 @@ protected:
     if (event->button() == Qt::LeftButton)
       QTableView::mouseDoubleClickEvent(event);
   }
+
+private:
+  GameListBackground m_background;
 };
 
 class GameListListView : public QListView
 {
 public:
-  explicit GameListListView(QWidget* parent = nullptr) : QListView(parent) {}
+  explicit GameListListView(QWidget* parent = nullptr) : QListView(parent), m_background(this) {}
 
 protected:
+  void paintEvent(QPaintEvent* event) override
+  {
+    m_background.Paint(viewport());
+    QListView::paintEvent(event);
+  }
+
   virtual void mouseDoubleClickEvent(QMouseEvent* const event) override
   {
     if (event->button() == Qt::LeftButton)
       QListView::mouseDoubleClickEvent(event);
   }
+
+private:
+  GameListBackground m_background;
 };
 }  // namespace
 
@@ -189,7 +260,8 @@ void GameList::MakeListView()
   m_list->setTabKeyNavigation(false);
   m_list->setSelectionMode(QAbstractItemView::ExtendedSelection);
   m_list->setSelectionBehavior(QAbstractItemView::SelectRows);
-  m_list->setAlternatingRowColors(true);
+  // Opaque alternate rows would hide the background image.
+  m_list->setAlternatingRowColors(!QFileInfo::exists(GetGameListBackgroundPath()));
   m_list->setShowGrid(false);
   m_list->setSortingEnabled(true);
   m_list->setCurrentIndex(QModelIndex());
